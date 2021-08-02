@@ -176,7 +176,7 @@ class ATLASModelAtmosphere(StellarAtmosphere):
         self.ref_distance = 1*constants.au
         uncalibrated_luminosity = self.luminosity()
         self.modelflux *= self.obs_luminosity/uncalibrated_luminosity
-        assert self.obs_luminosity == self.luminosity()
+        assert np.isclose(self.obs_luminosity,self.luminosity(),rtol=1e-6,atol=0)
 
     def calibrate_with_spectrum(self):
         cal_wave = self.calibration_spec['wave']
