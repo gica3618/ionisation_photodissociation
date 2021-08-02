@@ -55,11 +55,9 @@ class Test_StellarAtmosphere():
                                                    == self.atm.modelflux[0]/4
 
     def test_luminosity(self):
-        lum_at_ref_distance = np.trapz(self.atm.modelflux,self.atm.lambda_grid)\
+        expected_lum = np.trapz(self.atm.modelflux,self.atm.lambda_grid)\
                                 *4*np.pi*self.atm.ref_distance**2
-        dist = 100
-        assert self.atm.luminosity(distance=dist) == lum_at_ref_distance\
-                                                      *(self.atm.ref_distance/dist)**2
+        assert self.atm.luminosity() == expected_lum
 
     def test_plot_model(self):
         self.atm.plot_model()
