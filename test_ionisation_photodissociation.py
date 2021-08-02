@@ -34,6 +34,7 @@ class Test_ISF():
 
 
 class Test_StellarAtmosphere():
+
     atm = ip.StellarAtmosphere()
     atm.lambda_grid = np.array([1,2,3,4])
     atm.modelflux = np.array((10,20,40,90))
@@ -52,6 +53,13 @@ class Test_StellarAtmosphere():
         assert self.atm.flux(wavelength=self.atm.lambda_grid[0],
                              distance=2*self.atm.ref_distance)\
                                                    == self.atm.modelflux[0]/4
+
+    def test_luminosity(self):
+        lum_at_ref_distance = np.trapz(self.atm.modelflux,self.atm.lambda_grid)\
+                                *4*np.pi*self.atm.ref_distance**2
+        dist = 100
+        assert self.atm.luminosity(distance=dist) == lum_at_ref_distance\
+                                                      *(self.atm.ref_distance/dist)**2
 
     def test_plot_model(self):
         self.atm.plot_model()
