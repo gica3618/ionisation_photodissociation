@@ -62,7 +62,7 @@ class Test_StellarAtmosphere():
     def test_plot_model(self):
         self.atm.plot_model()
 
-    def test_filt_writing(self):
+    def test_file_writing(self):
         test_filepath = 'test.npz'
         dist = 1*constants.au
         self.atm.write_modelflux_to_file(filepath=test_filepath,distance=dist)
@@ -78,7 +78,7 @@ class Test_ATLAS():
     test_grid = np.array((1,2,3,4))
     R_Sun = 6.955e8
     template_init_kwargs = {'Teff':5780,'metallicity':-0.6,'logg':4.3,'Rstar':R_Sun,
-                            'calibration':None,'verbose':True}
+                            'calibration_spec':None,'verbose':True}
     template_atm = ip.ATLASModelAtmosphere(**template_init_kwargs)
 
     def test_grid_checking(self):
@@ -104,6 +104,27 @@ class Test_ATLAS():
                 with pytest.raises(AssertionError):
                     ip.ATLASModelAtmosphere(**kwargs)
 
+    def test_initialisation(self):
+        #test all None:
+        kwargs = self.template_init_kwargs.copy()
+        kwargs['Rstar'] = None
+        with pytest.raises(ValueError):
+            ip.ATLASModelAtmosphere(**kwargs)
+        #test 2x not None
+        for key in ('calibration_spec','obs_luminosity'):
+            kwargs = self.template_init_kwargs.copy()
+            assert kwargs['Rstar'] is not None
+            kwargs[key] = 1
+            with pytest.raises(AssertionError):
+                ip.ATLASModelAtmosphere(**kwargs)
+        #test 3x not None
+        kwargs = self.template_init_kwargs.copy()
+        assert kwargs['Rstar'] is not None
+        kwargs['calibration_spec'] = 1
+        kwargs['obs_luminosity'] = 1
+        with pytest.raises(AssertionError):
+            ip.ATLASModelAtmosphere(**kwargs)
+
     def test_adopted_grid_values(self):
         assert self.template_atm.Teff == 5750
         assert self.template_atm.metallicity == -0.5
@@ -128,20 +149,28 @@ class Test_ATLAS():
                          *(atm.ref_distance/dist)**2
         assert np.isclose(RJ_flux,expected_flux,rtol=1e-3,atol=0)
 
-    def test_calibration(self):
+    def test_calibration_with_luminosity(self):
+        test_lum = 3
+        test_kwargs = self.template_init_kwargs.copy()
+        test_kwargs["Rstar"] = None
+        test_kwargs['obs_luminosity'] = test_lum
+        test_atm = ip.ATLASModelAtmosphere(**test_kwargs)
+        assert test_lum == test_atm.luminosity()
+
+    def test_calibration_with_spec(self):
         ref_atm = ip.ATLASModelAtmosphere(**self.template_init_kwargs)
-        calibration = {'wave':ref_atm.lambda_grid,'flux':ref_atm.modelflux/2,
-                       'ref_distance':ref_atm.ref_distance}
+        calibration_spec = {'wave':ref_atm.lambda_grid,'flux':ref_atm.modelflux/2,
+                            'ref_distance':ref_atm.ref_distance}
         kwargs = self.template_init_kwargs.copy()
-        kwargs['calibration'] = calibration
+        kwargs['Rstar'] = None
+        kwargs['calibration_spec'] = calibration_spec
         atm = ip.ATLASModelAtmosphere(**kwargs)
         expected_scaling = 0.5
-        assert np.isclose(atm.calibration_scaling,expected_scaling,rtol=1e-4,atol=0)
+        assert np.isclose(atm.spec_calibration_scaling,expected_scaling,rtol=1e-4,atol=0)
 
     def test_plot_model(self):
         atm = ip.ATLASModelAtmosphere(**self.template_init_kwargs)
         atm.plot_model()
-
 
 
 class Test_betaPic():
@@ -164,7 +193,6 @@ class Test_betaPic():
 
     def test_plot_model(self):
         self.betaPic.plot_model()
-
 
 
 class Test_pd_cross_section():

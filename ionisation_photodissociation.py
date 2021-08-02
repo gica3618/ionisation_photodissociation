@@ -15,6 +15,7 @@ import h5py
 this_folder = os.path.dirname(os.path.abspath(__file__))
 
 R_Sun = 6.955e8
+L_Sun = 3.828e26
 Rydberg_J = constants.physical_constants['Rydberg constant times hc in J'][0] #J
 ionisation_potential = {'C':11.26030*constants.eV, 'O':13.61806*constants.eV} #J
 
@@ -98,12 +99,36 @@ class ATLASModelAtmosphere(StellarAtmosphere):
         index = np.argmin(np.abs(grid-value))
         return grid[index]
 
-    def __init__(self,Teff,metallicity,logg,Rstar,calibration=None,verbose=False):
+    def __init__(self,Teff,metallicity,logg,Rstar=None,obs_luminosity=None,
+                 calibration_spec=None,verbose=False):
+        '''There are three ways to set the luminosity of the star:
+            1) define Rstar
+            2) define obs_luminosity, so that the model flux will be scaled
+            3) define calibration (i.e. a spectrum, to which the model spectrum
+                will be scaled to)'''
         self.assert_within_grid(value=Teff,grid=self.Teff_grid)
         self.assert_within_grid(value=metallicity,grid=self.metallicity_grid)
         self.assert_within_grid(value=logg,grid=self.logg_grid)
-        self.Rstar = Rstar
         self.verbose = verbose
+        self.read_model(metallicity=metallicity,Teff=Teff,logg=logg)
+        self.extrapolate_RJ()
+        if Rstar is not None:
+            assert obs_luminosity is None and calibration_spec is None
+            self.ref_distance = Rstar
+        elif obs_luminosity is not None:
+            assert Rstar is None and calibration_spec is None
+            self.obs_luminosity = obs_luminosity
+            print('Rstar not specified, going to scale with luminosity')
+            self.calibrate_with_luminosity()
+        elif calibration_spec is not None:
+            assert Rstar is None and obs_luminosity is None
+            self.calibration_spec = calibration_spec
+            print('going to calibrate with provided spectrum')
+            self.calibrate_with_spectrum()
+        else:
+            raise ValueError('unable to define absolute flux and/or reference distance')
+
+    def read_model(self,metallicity,Teff,logg):
         self.metallicity = self.get_closest_grid_value(
                              value=metallicity,grid=self.metallicity_grid)
         self.Teff = self.get_closest_grid_value(value=Teff,grid=self.Teff_grid)
@@ -136,11 +161,6 @@ class ATLASModelAtmosphere(StellarAtmosphere):
         #flux in [W/m2/m] at the stellar surface:
         self.modelflux = modeldata[logg_string].astype(np.float64)\
                               *constants.erg/constants.centi**2/constants.angstrom
-        self.extrapolate_RJ()
-        self.ref_distance = self.Rstar
-        self.calibration = calibration
-        if self.calibration is not None:
-            self.calibrate()
 
     def extrapolate_RJ(self):
         max_wavelength = self.lambda_grid[-1]
@@ -152,26 +172,34 @@ class ATLASModelAtmosphere(StellarAtmosphere):
         self.lambda_grid = np.concatenate((self.lambda_grid,RJ_wavelength))
         self.modelflux = np.concatenate((self.modelflux,RJ_flux))
 
-    def calibrate(self):
-        cal_wave = self.calibration['wave']
-        cal_flux = self.calibration['flux']
+    def calibrate_with_luminosity(self):
+        self.ref_distance = 1*constants.au
+        uncalibrated_luminosity = self.luminosity()
+        self.modelflux *= self.obs_luminosity/uncalibrated_luminosity
+        assert self.obs_luminosity == self.luminosity()
+
+    def calibrate_with_spectrum(self):
+        cal_wave = self.calibration_spec['wave']
+        cal_flux = self.calibration_spec['flux']
+        self.ref_distance = self.calibration_spec['ref_distance']
         try:
-            cal_errors = self.calibration['error']
+            cal_errors = self.calibration_spec['error']
         except KeyError:
             cal_errors = np.ones_like(cal_flux)
         def residual2(scaling):
             flux = self.flux(wavelength=cal_wave,
-                             distance=self.calibration['ref_distance'])
+                             distance=self.calibration_spec['ref_distance'])
             scaled_model_flux = scaling*flux
             res = cal_flux-scaled_model_flux
             return np.sum(res**2/cal_errors**2)
         x0 = 1
         optimisation = optimize.minimize(residual2,x0,method='Nelder-Mead')
         assert optimisation.success
-        self.calibration_scaling = optimisation.x[0]
+        self.spec_calibration_scaling = optimisation.x[0]
         if self.verbose:
-            print('optimal calibration scaling: {:g}'.format(self.calibration_scaling))
-        self.modelflux *= self.calibration_scaling
+            print('optimal calibration scaling: {:g}'.format(
+                                     self.spec_calibration_scaling))
+        self.modelflux *= self.spec_calibration_scaling
 
     def plot_model(self,label=None):
         ax = StellarAtmosphere.plot_model(self,label='final flux')
@@ -191,8 +219,6 @@ class ATLASModelAtmosphere(StellarAtmosphere):
 class betaPicObsSpectrum(StellarAtmosphere):
     #from Alexis email
     model_filepath = 'bPicNormFlux1AU.txt'
-    betaPic_ATLAS_atm = ATLASModelAtmosphere(Teff=8052,metallicity=0,logg=4.15,
-                                             Rstar=1.8*R_Sun)
     cutoff_flux = 15832
     max_cutoff_wavelength = 1*constants.micro
 
@@ -204,14 +230,16 @@ class betaPicObsSpectrum(StellarAtmosphere):
                           /constants.angstrom #W/m2/m
         self.min_betaPic_data_wave = np.min(data_wave)
         self.max_betaPic_data_wave = np.max(data_wave)
-        left_ATLAS_region = self.betaPic_ATLAS_atm.lambda_grid < self.min_betaPic_data_wave
-        left_ATLAS_wave = self.betaPic_ATLAS_atm.lambda_grid[left_ATLAS_region]
-        right_ATLAS_region = self.betaPic_ATLAS_atm.lambda_grid > self.max_betaPic_data_wave
-        right_ATLAS_wave = self.betaPic_ATLAS_atm.lambda_grid[right_ATLAS_region]
+        betaPic_ATLAS_atm = ATLASModelAtmosphere(Teff=8052,metallicity=0.05,logg=4.15,
+                                                 obs_luminosity=8.7*L_Sun)
+        left_ATLAS_region = betaPic_ATLAS_atm.lambda_grid < self.min_betaPic_data_wave
+        left_ATLAS_wave = betaPic_ATLAS_atm.lambda_grid[left_ATLAS_region]
+        right_ATLAS_region = betaPic_ATLAS_atm.lambda_grid > self.max_betaPic_data_wave
+        right_ATLAS_wave = betaPic_ATLAS_atm.lambda_grid[right_ATLAS_region]
         self.lambda_grid = np.concatenate((left_ATLAS_wave,data_wave,right_ATLAS_wave))
-        left_ATLAS_flux = self.betaPic_ATLAS_atm.flux(wavelength=left_ATLAS_wave,
+        left_ATLAS_flux = betaPic_ATLAS_atm.flux(wavelength=left_ATLAS_wave,
                                                       distance=self.ref_distance)
-        right_ATLAS_flux = self.betaPic_ATLAS_atm.flux(wavelength=right_ATLAS_wave,
+        right_ATLAS_flux = betaPic_ATLAS_atm.flux(wavelength=right_ATLAS_wave,
                                                        distance=self.ref_distance)
         self.modelflux = np.concatenate((left_ATLAS_flux,data_flux,right_ATLAS_flux))
         #apply dilution:
@@ -511,7 +539,7 @@ class IonisationBalance():
 
 if __name__ == '__main__':
     sun = ATLASModelAtmosphere(Teff=5780,metallicity=0.01,logg=4.43,Rstar=6.955e8,
-                               calibration=None,verbose=True)
+                               calibration_spec=None,verbose=True)
     sun.plot_model()
     betaPic = betaPicObsSpectrum()
     betaPic.plot_model()
