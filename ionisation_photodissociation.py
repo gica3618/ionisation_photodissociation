@@ -75,6 +75,9 @@ class StellarAtmosphere(RadiationSpectrum):
         return np.trapz(flux_at_ref_distance,self.lambda_grid)\
                                        * 4*np.pi*self.ref_distance**2
 
+    def scale_spectrum(self,scaling):
+        self.modelflux *= scaling
+
     def write_modelflux_to_file(self,filepath,distance):
         flux = self.flux(wavelength=self.lambda_grid,distance=distance)
         np.savez(filepath,wavelength=self.lambda_grid,flux=flux)

@@ -35,10 +35,15 @@ class Test_ISF():
 
 class Test_StellarAtmosphere():
 
-    atm = ip.StellarAtmosphere()
-    atm.lambda_grid = np.array([1,2,3,4])
-    atm.modelflux = np.array((10,20,40,90))
-    atm.ref_distance = 2
+    def __init__(self):
+        self.atm = self.generate_test_atm()
+
+    def generate_test_atm(self):
+        atm = ip.StellarAtmosphere()
+        atm.lambda_grid = np.array([1,2,3,4])
+        atm.modelflux = np.array((10,20,40,90))
+        atm.ref_distance = 2
+        return atm
 
     def test_lamb_limits(self):
         too_large_lamb = np.array((5,7))
@@ -58,6 +63,18 @@ class Test_StellarAtmosphere():
         expected_lum = np.trapz(self.atm.modelflux,self.atm.lambda_grid)\
                                 *4*np.pi*self.atm.ref_distance**2
         assert self.atm.luminosity() == expected_lum
+
+    def test_scaling(self):
+        test_atm = self.generate_test_atm()
+        unscaled_flux = test_atm.flux(wavelength=test_atm.lambda_grid,
+                                      distance=test_atm.ref_distance)
+        unscaled_luminosity = test_atm.luminosity()
+        scaling = 3.5
+        test_atm.scale_spectrum(scaling=scaling)
+        scaled_flux = test_atm.flux(wavelength=test_atm.lambda_grid,
+                                      distance=test_atm.ref_distance)
+        assert np.all(unscaled_flux*scaling==scaled_flux)
+        assert unscaled_luminosity*scaling == test_atm.luminosity()
 
     def test_plot_model(self):
         self.atm.plot_model()
