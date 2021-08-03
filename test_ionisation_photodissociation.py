@@ -21,9 +21,13 @@ class Test_ISF():
     isf = ip.ISF()
 
     def test_scaling(self):
-        scaled_isf = ip.ISF(scaling=2)
-        test_lamb = 100*constants.nano
-        assert self.isf.flux(test_lamb) == scaled_isf.flux(test_lamb)/2
+        scalings = [lambda wavelength: 2, lambda wavelength: wavelength**2]
+        for scaling in scalings:
+            scaled_isf = ip.ISF(scaling=scaling)
+            wavelength = self.isf.lambda_grid
+            expected_flux = self.isf.flux(wavelength=wavelength)\
+                                          *scaling(wavelength=wavelength)
+            assert np.all(expected_flux == scaled_isf.flux(wavelength=wavelength))
 
     def test_lambda_check(self):
         too_small_lambda = np.array((0.1*self.isf.lambda_min,0.5*self.isf.lambda_min))
@@ -343,12 +347,13 @@ class Test_rate():
                               rtol=1e-6,atol=0)
 
     def test_ISF_scaling(self):
-        ISF_scaling=6.7
+        scalar_scaling = 6.7
+        ISF_scaling = lambda wavelength: scalar_scaling
         for crosssection,atm,rate in self.rate_iterator():
             unscaled_isf_rate = rate.isf_rate
             scaled_rate = ip.Rate(stellar_atmosphere=atm,crosssection=crosssection,
                                   ISF_scaling=ISF_scaling)
-            assert np.isclose(ISF_scaling*unscaled_isf_rate,scaled_rate.isf_rate,
+            assert np.isclose(scalar_scaling*unscaled_isf_rate,scaled_rate.isf_rate,
                               rtol=1e-6,atol=0)
 
     def test_rate(self):
@@ -407,7 +412,7 @@ class Test_ionisation_balance():
                                                   self.io_crosssections):
                 recombination = recomb(element=element)
                 io_rate = ip.IonisationRate(crosssection=io_cs(element=element),
-                                            ISF_scaling=1,
+                                            ISF_scaling=lambda wavelength: 1,
                                             stellar_atmosphere=solar_atmosphere)
                 balance = ip.IonisationBalance(ionisation_rate=io_rate,
                                                recombination=recombination)

@@ -35,7 +35,7 @@ class ISF(RadiationSpectrum):
     lambda_max = 200*constants.nano
     lambda_grid = np.linspace(lambda_min,lambda_max,1000)
 
-    def __init__(self,scaling=1):
+    def __init__(self,scaling=(lambda wavelength: 1)):
         self.scaling = scaling
 
     def flux(self,wavelength):
@@ -49,7 +49,7 @@ class ISF(RadiationSpectrum):
         flux = photon_flux*photon_energy
         valid_region = (wavelength>=self.lambda_min) & (wavelength<=self.lambda_max)
         flux = np.where(valid_region,flux,0)
-        return flux*self.scaling
+        return flux*self.scaling(wavelength=wavelength)
 
 
 class StellarAtmosphere(RadiationSpectrum):
@@ -391,7 +391,8 @@ class NaharRecombination():
 
 class Rate():
 
-    def __init__(self,crosssection,ISF_scaling=1,stellar_atmosphere=None):
+    def __init__(self,crosssection,ISF_scaling=(lambda wavelength: 1),
+                 stellar_atmosphere=None):
         self.crosssection = crosssection
         self.isf = ISF(scaling=ISF_scaling)
         self.stellar_atmosphere = stellar_atmosphere
@@ -462,7 +463,8 @@ class Rate():
 
 class PhotodissociationRate(Rate):
 
-    def __init__(self,crosssection,stellar_atmosphere,ISF_scaling=1):
+    def __init__(self,crosssection,stellar_atmosphere,
+                 ISF_scaling=(lambda wavelength: 1)):
         Rate.__init__(self,crosssection=crosssection,ISF_scaling=ISF_scaling,
                       stellar_atmosphere=stellar_atmosphere)
 
@@ -593,7 +595,8 @@ if __name__ == '__main__':
         plt.xlabel('T [K]')
         plt.ylabel('recomb coeff')
 
-        ionisation_rate = IonisationRate(crosssection=nahar_cs,ISF_scaling=1,
+        ionisation_rate = IonisationRate(crosssection=nahar_cs,
+                                         ISF_scaling=lambda wavelength: 1,
                                          stellar_atmosphere=betaPic)
         balance = IonisationBalance(ionisation_rate=ionisation_rate,
                                     recombination=nahar_recomb)
