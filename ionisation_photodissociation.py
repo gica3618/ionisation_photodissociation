@@ -76,7 +76,7 @@ class StellarAtmosphere(RadiationSpectrum):
                                        * 4*np.pi*self.ref_distance**2
 
     def _scale_spectrum(self,scaling):
-        self.modelflux *= scaling
+        self.modelflux *= scaling(wavelength=self.lambda_grid)
 
     def write_modelflux_to_file(self,filepath,distance):
         flux = self.flux(wavelength=self.lambda_grid,distance=distance)
