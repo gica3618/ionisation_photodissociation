@@ -75,7 +75,7 @@ class StellarAtmosphere(RadiationSpectrum):
         return np.trapz(flux_at_ref_distance,self.lambda_grid)\
                                        * 4*np.pi*self.ref_distance**2
 
-    def scale_spectrum(self,scaling):
+    def _scale_spectrum(self,scaling):
         self.modelflux *= scaling
 
     def write_modelflux_to_file(self,filepath,distance):
@@ -103,7 +103,7 @@ class ATLASModelAtmosphere(StellarAtmosphere):
         return grid[index]
 
     def __init__(self,Teff,metallicity,logg,Rstar=None,obs_luminosity=None,
-                 calibration_spec=None,verbose=False):
+                 calibration_spec=None,verbose=False,scaling=None):
         '''There are three ways to set the luminosity of the star:
             1) define Rstar
             2) define obs_luminosity, so that the model flux will be scaled
@@ -130,6 +130,9 @@ class ATLASModelAtmosphere(StellarAtmosphere):
             self.calibrate_with_spectrum()
         else:
             raise ValueError('unable to define absolute flux and/or reference distance')
+        #now that modelflux is calibrated, I can apply the scaling:
+        if scaling is not None:
+            self._scale_spectrum(scaling=scaling)
 
     def read_model(self,metallicity,Teff,logg):
         self.metallicity = self.get_closest_grid_value(
@@ -225,7 +228,7 @@ class betaPicObsSpectrum(StellarAtmosphere):
     cutoff_flux = 15832
     max_cutoff_wavelength = 1*constants.micro
 
-    def __init__(self,dilution=1):
+    def __init__(self,dilution=1,scaling=None):
         self.ref_distance = 1*constants.au
         model_data = np.loadtxt(self.model_filepath)
         data_wave = model_data[:,0]*constants.angstrom
@@ -253,6 +256,8 @@ class betaPicObsSpectrum(StellarAtmosphere):
         cutoff_region = (self.modelflux<self.cutoff_flux)\
                             & (self.lambda_grid<self.max_cutoff_wavelength)
         self.modelflux[cutoff_region] = 0
+        if scaling is not None:
+            self._scale_spectrum(scaling=scaling)
 
     def plot_model(self):
         ax = StellarAtmosphere.plot_model(self,label='final beta Pic flux')

@@ -16,7 +16,6 @@ import os
 import itertools
 
 
-
 class Test_ISF():
 
     isf = ip.ISF()
@@ -33,17 +32,17 @@ class Test_ISF():
             assert np.all(self.isf.flux(lamb) == 0)
 
 
+def generate_test_atm():
+    atm = ip.StellarAtmosphere()
+    atm.lambda_grid = np.array([1,2.2,3.3,4.6])
+    atm.modelflux = np.array((10.2,20,40.4,90))
+    atm.ref_distance = 2
+    return atm
+
+
 class Test_StellarAtmosphere():
 
-    def __init__(self):
-        self.atm = self.generate_test_atm()
-
-    def generate_test_atm(self):
-        atm = ip.StellarAtmosphere()
-        atm.lambda_grid = np.array([1,2,3,4])
-        atm.modelflux = np.array((10,20,40,90))
-        atm.ref_distance = 2
-        return atm
+    atm = generate_test_atm()
 
     def test_lamb_limits(self):
         too_large_lamb = np.array((5,7))
@@ -67,17 +66,18 @@ class Test_StellarAtmosphere():
     def test_scaling(self):
         scalings = [3.5,np.array((2,3,5,0.1))]
         for scaling in scalings:
-            test_atm = self.generate_test_atm()
+            test_atm = generate_test_atm()
+            original_model_flux = test_atm.modelflux.copy()
             unscaled_flux = test_atm.flux(wavelength=test_atm.lambda_grid,
                                           distance=test_atm.ref_distance)
-            unscaled_luminosity = test_atm.luminosity()
-            test_atm.scale_spectrum(scaling=scaling)
+            test_atm._scale_spectrum(scaling=scaling)
+            assert np.all(original_model_flux*scaling==test_atm.modelflux)
             scaled_flux = test_atm.flux(wavelength=test_atm.lambda_grid,
-                                          distance=test_atm.ref_distance)
+                                        distance=test_atm.ref_distance)
             assert np.all(unscaled_flux*scaling==scaled_flux)
-            scaled_luminosity = np.trapz(scaled_flux,test_atm.lambda_grid)\
+            expected_luminosity = np.trapz(unscaled_flux*scaling,test_atm.lambda_grid)\
                                  *4*np.pi*test_atm.ref_distance**2
-            assert unscaled_luminosity*scaling == scaled_luminosity
+            assert expected_luminosity == test_atm.luminosity()
 
     def test_plot_model(self):
         self.atm.plot_model()
@@ -92,6 +92,23 @@ class Test_StellarAtmosphere():
                         ==self.atm.flux(wavelength=data['wavelength'],distance=dist))
         os.remove(test_filepath)
 
+
+def general_test_flux_scaling(unscaled_atm,atm_cls,atm_kwargs):
+    scalings = [3,np.random.randint(low=1,high=100,size=unscaled_atm.lambda_grid.size)*1.2]
+    dist = 1*constants.au
+    for scaling in scalings:
+        #make a copy in order not to modify atm_kwargs
+        scaled_atm_kwargs = atm_kwargs.copy()
+        scaled_atm_kwargs['scaling'] = scaling
+        scaled_atm = atm_cls(**scaled_atm_kwargs)
+        assert np.all(unscaled_atm.modelflux*scaling == scaled_atm.modelflux)
+        flux_kwargs = {'wavelength':scaled_atm.lambda_grid,'distance':dist}
+        unscaled_flux = unscaled_atm.flux(**flux_kwargs)
+        scaled_flux = scaled_atm.flux(**flux_kwargs)
+        assert np.allclose(scaling*unscaled_flux,scaled_flux,rtol=1e-6,atol=0)
+        expected_lum = np.trapz(unscaled_flux*scaling,unscaled_atm.lambda_grid)\
+                                                               *4*np.pi*dist**2
+        assert np.isclose(expected_lum,scaled_atm.luminosity(),rtol=1e-6,atol=0)
 
 class Test_ATLAS():
 
@@ -188,6 +205,11 @@ class Test_ATLAS():
         expected_scaling = 0.5
         assert np.isclose(atm.spec_calibration_scaling,expected_scaling,rtol=1e-4,atol=0)
 
+    def test_flux_scaling(self):
+        general_test_flux_scaling(unscaled_atm=self.template_atm,
+                                  atm_cls=ip.ATLASModelAtmosphere,
+                                  atm_kwargs=self.template_init_kwargs)
+
     def test_plot_model(self):
         atm = ip.ATLASModelAtmosphere(**self.template_init_kwargs)
         atm.plot_model()
@@ -210,6 +232,11 @@ class Test_betaPic():
         betaPic_diluted_int = np.trapz(betaPic_diluted.modelflux,
                                        betaPic_diluted.lambda_grid)
         assert np.isclose(betaPic_int,betaPic_diluted_int,rtol=1e-3,atol=0)
+
+    def test_scaling(self):
+        general_test_flux_scaling(
+                     unscaled_atm=self.betaPic,atm_cls=ip.betaPicObsSpectrum,
+                     atm_kwargs={})
 
     def test_plot_model(self):
         self.betaPic.plot_model()
@@ -289,11 +316,35 @@ class Test_rate():
             if not hasattr(crosssection,'lambda_grid') and atm is None:
                 assert np.all(rate.lambda_grid==isf.lambda_grid)
 
-    def test_stellar_rate_scaling(self):
+    def test_stellar_rate_distance_scaling(self):
         for crosssection,atm,rate in self.rate_iterator():
             if atm is not None:
                 assert rate.stellar_rate(distance=1*constants.au)\
                               == 4*rate.stellar_rate(distance=2*constants.au)
+
+    def test_stellar_rate_flux_scaling(self):
+        dist = 1*constants.au
+        scaling = 3.5
+        atm_kwargs = {'Teff':6000,'metallicity':0.01,'logg':4.2,'Rstar':7e8}
+        for crosssection in itertools.chain(pd_crosssections_iterator(),
+                                            io_crosssections_iterator()):
+            atm = ip.ATLASModelAtmosphere(**atm_kwargs)
+            original_rate = ip.Rate(stellar_atmosphere=atm,crosssection=crosssection)
+            original_stellar_rate = original_rate.stellar_rate(distance=dist)
+            scaled_atm = ip.ATLASModelAtmosphere(scaling=scaling,**atm_kwargs)
+            scaled_rate = ip.Rate(stellar_atmosphere=scaled_atm,crosssection=crosssection)
+            scaled_stellar_rate = scaled_rate.stellar_rate(distance=dist)
+            assert np.isclose(scaled_stellar_rate,scaling*original_stellar_rate,
+                              rtol=1e-6,atol=0)
+
+    def test_ISF_scaling(self):
+        ISF_scaling=6.7
+        for crosssection,atm,rate in self.rate_iterator():
+            unscaled_isf_rate = rate.isf_rate
+            scaled_rate = ip.Rate(stellar_atmosphere=atm,crosssection=crosssection,
+                                  ISF_scaling=ISF_scaling)
+            assert np.isclose(ISF_scaling*unscaled_isf_rate,scaled_rate.isf_rate,
+                              rtol=1e-6,atol=0)
 
     def test_rate(self):
         for crosssection,atm,rate in self.rate_iterator():
