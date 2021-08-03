@@ -65,16 +65,19 @@ class Test_StellarAtmosphere():
         assert self.atm.luminosity() == expected_lum
 
     def test_scaling(self):
-        test_atm = self.generate_test_atm()
-        unscaled_flux = test_atm.flux(wavelength=test_atm.lambda_grid,
-                                      distance=test_atm.ref_distance)
-        unscaled_luminosity = test_atm.luminosity()
-        scaling = 3.5
-        test_atm.scale_spectrum(scaling=scaling)
-        scaled_flux = test_atm.flux(wavelength=test_atm.lambda_grid,
-                                      distance=test_atm.ref_distance)
-        assert np.all(unscaled_flux*scaling==scaled_flux)
-        assert unscaled_luminosity*scaling == test_atm.luminosity()
+        scalings = [3.5,np.array((2,3,5,0.1))]
+        for scaling in scalings:
+            test_atm = self.generate_test_atm()
+            unscaled_flux = test_atm.flux(wavelength=test_atm.lambda_grid,
+                                          distance=test_atm.ref_distance)
+            unscaled_luminosity = test_atm.luminosity()
+            test_atm.scale_spectrum(scaling=scaling)
+            scaled_flux = test_atm.flux(wavelength=test_atm.lambda_grid,
+                                          distance=test_atm.ref_distance)
+            assert np.all(unscaled_flux*scaling==scaled_flux)
+            scaled_luminosity = np.trapz(scaled_flux,test_atm.lambda_grid)\
+                                 *4*np.pi*test_atm.ref_distance**2
+            assert unscaled_luminosity*scaling == scaled_luminosity
 
     def test_plot_model(self):
         self.atm.plot_model()
