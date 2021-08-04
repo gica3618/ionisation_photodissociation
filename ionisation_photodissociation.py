@@ -121,12 +121,14 @@ class ATLASModelAtmosphere(StellarAtmosphere):
         elif obs_luminosity is not None:
             assert Rstar is None and calibration_spec is None
             self.obs_luminosity = obs_luminosity
-            print('Rstar not specified, going to scale with luminosity')
+            if self.verbose:
+                print('Rstar not specified, going to scale with luminosity')
             self.calibrate_with_luminosity()
         elif calibration_spec is not None:
             assert Rstar is None and obs_luminosity is None
             self.calibration_spec = calibration_spec
-            print('going to calibrate with provided spectrum')
+            if self.verbose:
+                print('going to calibrate with provided spectrum')
             self.calibrate_with_spectrum()
         else:
             raise ValueError('unable to define absolute flux and/or reference distance')
