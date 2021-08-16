@@ -6,7 +6,7 @@ Created on Tue Jul 27 09:23:27 2021
 @author: gianni
 """
 
-#for testing with pytest
+#for testing with pytest (just type "pytest" in the terminal)
 
 import ionisation_photodissociation as ip
 import numpy as np
