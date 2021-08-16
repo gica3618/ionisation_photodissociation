@@ -107,7 +107,7 @@ class ATLASModelAtmosphere(StellarAtmosphere):
         '''There are three ways to set the luminosity of the star:
             1) define Rstar
             2) define obs_luminosity, so that the model flux will be scaled
-            3) define calibration (i.e. a spectrum, to which the model spectrum
+            3) define calibration_spec (i.e. a spectrum, to which the model spectrum
                 will be scaled to)'''
         self.assert_within_grid(value=Teff,grid=self.Teff_grid)
         self.assert_within_grid(value=metallicity,grid=self.metallicity_grid)
@@ -387,7 +387,9 @@ class NaharRecombination():
 
     def recombination_coeff(self,T):
         logT = np.log10(T)
-        assert np.all(logT >= np.min(self.logT)) and np.all(logT < np.max(self.logT))
+        assert np.all(logT >= np.min(self.logT)) and np.all(logT < np.max(self.logT)),\
+                 'requested T={:g} not within bounds ({:g}-{:g})'.format(
+                         T,10**np.min(self.logT),10**np.max(self.logT))
         return np.interp(logT,self.logT,self.recomb,left=np.nan,right=np.nan)
 
 
