@@ -16,24 +16,43 @@ import os
 import itertools
 
 
-class Test_ISF():
+class Test_ISF_scalings():
 
-    isf = ip.ISF()
+    fields = [ip.DraineISF,ip.HabingField]
 
     def test_scaling(self):
         scalings = [lambda wavelength: 2, lambda wavelength: wavelength**2]
-        for scaling in scalings:
-            scaled_isf = ip.ISF(scaling=scaling)
-            wavelength = self.isf.lambda_grid
-            expected_flux = self.isf.flux(wavelength=wavelength)\
-                                          *scaling(wavelength=wavelength)
-            assert np.all(expected_flux == scaled_isf.flux(wavelength=wavelength))
+        for field in self.fields:
+            unscaled_field = field()
+            for scaling in scalings:
+                scaled_field = field(scaling=scaling)
+                wavelength = unscaled_field.lambda_grid
+                expected_flux = unscaled_field.flux(wavelength=wavelength)\
+                                              *scaling(wavelength=wavelength)
+                assert np.all(expected_flux == scaled_field.flux(wavelength=wavelength))
+
+
+class Test_DraineISF():
 
     def test_lambda_check(self):
-        too_small_lambda = np.array((0.1*self.isf.lambda_min,0.5*self.isf.lambda_min))
-        too_large_lambda = np.array((1.01*self.isf.lambda_max,2*self.isf.lambda_max))
+        isf = ip.DraineISF()
+        too_small_lambda = np.array((0.1*isf.lambda_min,0.5*isf.lambda_min))
+        too_large_lambda = np.array((1.01*isf.lambda_max,2*isf.lambda_max))
         for lamb in (too_small_lambda,too_large_lambda):
-            assert np.all(self.isf.flux(lamb) == 0)
+            assert np.all(isf.flux(lamb) == 0)
+
+
+class Test_Habing():
+
+    def test_interpolation(self):
+        field = ip.HabingField()
+        out_of_range_lambda = np.array([90,2000])*constants.nano
+        for lamb in out_of_range_lambda:
+            assert field.flux(lamb) == 0
+        test_lamb = 650.2*constants.nano
+        test_energy = constants.h*constants.c/test_lamb
+        expected_flux = 3.90754e+06*test_energy/constants.centi**2/constants.nano
+        assert np.isclose(field.flux(650.2*constants.nano),expected_flux,rtol=1e-6,atol=0)
 
 
 def generate_test_atm():
@@ -300,7 +319,7 @@ def io_crosssections_iterator():
         for cs in (ip.NaharIonisationCrossSection(element=element),
                    ip.OsterbrockIonisationCrossSection(element=element)):
             yield cs
-isf = ip.ISF()
+isf = ip.DraineISF()
 
 
 class Test_rate():

@@ -27,7 +27,7 @@ class RadiationSpectrum():
         raise NotImplementedError
 
 
-class ISF(RadiationSpectrum):
+class DraineISF(RadiationSpectrum):
     #interstellar radiation field, original from Draine (1978),
     #here in the form of Lee (1984)
     #(https://ui.adsabs.harvard.edu/abs/1984ApJ...282..172L/abstract)
@@ -50,6 +50,21 @@ class ISF(RadiationSpectrum):
         valid_region = (wavelength>=self.lambda_min) & (wavelength<=self.lambda_max)
         flux = np.where(valid_region,flux,0)
         return flux*self.scaling(wavelength=wavelength)
+
+
+class HabingField(RadiationSpectrum):
+
+    def __init__(self,scaling=(lambda wavelength: 1)):
+        self.scaling = scaling
+        data_filepath = os.path.join(this_folder,'habing_field.txt')
+        data = np.loadtxt(data_filepath)
+        self.lambda_grid = data[:,0]*constants.nano
+        photon_energy = constants.h*constants.c/self.lambda_grid
+        self.flux_grid = data[:,1]/constants.centi**2/constants.nano * photon_energy #W/m2/m
+
+    def flux(self,wavelength):
+        return np.interp(x=wavelength,xp=self.lambda_grid,fp=self.flux_grid,
+                         left=0,right=0) * self.scaling(wavelength=wavelength)
 
 
 class StellarAtmosphere(RadiationSpectrum):
@@ -209,8 +224,10 @@ class ATLASModelAtmosphere(StellarAtmosphere):
                                      self.spec_calibration_scaling))
         self.modelflux *= self.spec_calibration_scaling
 
-    def plot_model(self,label=None):
+    def plot_model(self,title=None):
         ax = StellarAtmosphere.plot_model(self,label='final flux')
+        if title is not None:
+            ax.set_title(title)
         if hasattr(self,'calibration_scaling'):
             ax.plot(self.lambda_grid/constants.nano,self.modelflux,'.-',
                     label='before calibration')
@@ -222,11 +239,13 @@ class ATLASModelAtmosphere(StellarAtmosphere):
                             ('RJ region',None)):
             ax.axvline(lamb/constants.nano,color='black',linestyle='dashed',label=lab)
             ax.legend(loc='best')
+        return ax
                     
 
 class betaPicObsSpectrum(StellarAtmosphere):
     #from Alexis email
-    model_filepath = 'bPicNormFlux1AU.txt'
+    this_folder = os.path.dirname(os.path.abspath(__file__))
+    model_filepath = os.path.join(this_folder,'bPicNormFlux1AU.txt')
     cutoff_flux = 15832
     max_cutoff_wavelength = 1*constants.micro
 
@@ -261,12 +280,15 @@ class betaPicObsSpectrum(StellarAtmosphere):
         if scaling is not None:
             self._scale_spectrum(scaling=scaling)
 
-    def plot_model(self):
+    def plot_model(self,title=None):
         ax = StellarAtmosphere.plot_model(self,label='final beta Pic flux')
+        if title is not None:
+            ax.set_title(title)
         for lamb,lab in zip((self.min_betaPic_data_wave,self.max_betaPic_data_wave),
                             ('beta Pic data region',None)):
             ax.axvline(lamb/constants.nano,linestyle='dashed',color='red',label=lab)
         ax.legend(loc='best')
+        return ax
 
 
 class CrossSection():
@@ -398,7 +420,7 @@ class Rate():
     def __init__(self,crosssection,ISF_scaling=(lambda wavelength: 1),
                  stellar_atmosphere=None):
         self.crosssection = crosssection
-        self.isf = ISF(scaling=ISF_scaling)
+        self.isf = DraineISF(scaling=ISF_scaling)
         self.stellar_atmosphere = stellar_atmosphere
         self.construct_lambda_grid()
         self.compute_ref_rates()
