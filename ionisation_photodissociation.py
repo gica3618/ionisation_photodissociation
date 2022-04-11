@@ -242,7 +242,7 @@ class ATLASModelAtmosphere(StellarAtmosphere):
             plot_cal_flux = self.calibration_spec['flux']\
                               *(self.calibration_spec['ref_distance']/self.ref_distance)**2
             ax.plot(self.calibration_spec['wave']/constants.nano,plot_cal_flux,
-                    label='calibration')
+                    label='calibration spectrum')
         for lamb,lab in zip((self.original_lambda_grid[-1],self.max_RJ_wavelength),
                             ('RJ region',None)):
             ax.axvline(lamb/constants.nano,color='black',linestyle='dashed',label=lab)
