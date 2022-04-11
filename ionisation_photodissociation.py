@@ -482,8 +482,10 @@ class Rate():
                                       distance=distance)
 
     @staticmethod
-    def print_rate(ID,rate):
-        print(f'{ID} rate: {rate} s-1')
+    def print_rate(ID,rate,additional_info=''):
+        if additional_info != '':
+            additional_info = f' ({additional_info})'
+        print(f'{ID} rate{additional_info}: {rate} s-1')
         lifetime = 1/rate
         print('{:s} lifetime: {:g} days ({:g} years)'.format(ID,lifetime/constants.day,
                                                               lifetime/constants.year))
@@ -492,7 +494,8 @@ class Rate():
         self.print_rate(ID='ISF',rate=self.isf_rate)
         if self.stellar_atmosphere is not None:
             stellar_rate = self.stellar_rate(distance=distance)
-            self.print_rate(ID='stellar',rate=stellar_rate)
+            additional_info = '' if distance is None else f'at {distance/constants.au} au'
+            self.print_rate(ID='stellar',rate=stellar_rate,additional_info=additional_info)
 
 
 class PhotodissociationRate(Rate):
