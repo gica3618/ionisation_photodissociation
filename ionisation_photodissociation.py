@@ -97,6 +97,14 @@ class StellarAtmosphere(RadiationSpectrum):
         flux = self.flux(wavelength=self.lambda_grid,distance=distance)
         np.savez(filepath,wavelength=self.lambda_grid,flux=flux)
 
+    def write_modelflux_to_txt_file(self,filepath,distance):
+        header = f'wavelength [nm] stellar flux at {distance/constants.au} au [erg/cm2/nm]'
+        flux = self.flux(wavelength=self.lambda_grid,distance=distance)
+        output = np.array((self.lambda_grid/constants.nano,
+                           flux/constants.erg/constants.centi**-2/constants.nano**-1))
+        output = output.T
+        np.savetxt(fname=filepath,X=output,header=header,fmt='%.10e')
+
 
 class ATLASModelAtmosphere(StellarAtmosphere):
 
@@ -228,19 +236,19 @@ class ATLASModelAtmosphere(StellarAtmosphere):
         ax = StellarAtmosphere.plot_model(self,label='final flux')
         if title is not None:
             ax.set_title(title)
-        if hasattr(self,'calibration_scaling'):
-            ax.plot(self.lambda_grid/constants.nano,self.modelflux,'.-',
-                    label='before calibration')
-            plot_cal_flux = self.calibration['flux']\
-                              *(self.calibration['ref_distance']/self.ref_distance)**2
-            ax.plot(self.calibration['wave']/constants.nano,plot_cal_flux,
+        if hasattr(self,'spec_calibration_scaling'):
+            ax.plot(self.lambda_grid/constants.nano,self.modelflux/self.spec_calibration_scaling,
+                    '.-',label='before calibration')
+            plot_cal_flux = self.calibration_spec['flux']\
+                              *(self.calibration_spec['ref_distance']/self.ref_distance)**2
+            ax.plot(self.calibration_spec['wave']/constants.nano,plot_cal_flux,
                     label='calibration')
         for lamb,lab in zip((self.original_lambda_grid[-1],self.max_RJ_wavelength),
                             ('RJ region',None)):
             ax.axvline(lamb/constants.nano,color='black',linestyle='dashed',label=lab)
             ax.legend(loc='best')
         return ax
-                    
+
 
 class betaPicObsSpectrum(StellarAtmosphere):
     #from Alexis email
@@ -574,6 +582,16 @@ class IonisationBalance():
 
 
 if __name__ == '__main__':
+    draine = DraineISF()
+    habing = HabingField()
+    lamb = habing.lambda_grid
+    plt.figure()
+    plt.plot(lamb/constants.nano,draine.flux(lamb),label='draine')
+    plt.plot(lamb/constants.nano,habing.flux(lamb),label='haning')
+    plt.xlabel('lamb [nm]')
+    plt.ylabel('flux [W/m2/m]')
+    plt.legend(loc='best')
+
     sun = ATLASModelAtmosphere(Teff=5780,metallicity=0.01,logg=4.43,Rstar=6.955e8,
                                calibration_spec=None,verbose=True)
     sun.plot_model()

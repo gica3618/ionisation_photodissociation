@@ -109,15 +109,30 @@ class Test_StellarAtmosphere():
         self.atm.plot_model()
 
     def test_file_writing(self):
-        test_filepath = 'test.npz'
+        test_cases = [{'file_ending':'txt','method':self.atm.write_modelflux_to_txt_file},
+                      {'file_ending':'npz','method':self.atm.write_modelflux_to_file}]
         dist = 1*constants.au
-        self.atm.write_modelflux_to_file(filepath=test_filepath,distance=dist)
-        data = np.load(test_filepath)
-        assert np.all(data['wavelength']==self.atm.lambda_grid)
-        assert np.all(data['flux']
-                        ==self.atm.flux(wavelength=data['wavelength'],distance=dist))
-        os.remove(test_filepath)
-
+        for test_case in test_cases:
+            test_filepath = 'test.{:s}'.format(test_case['file_ending'])
+            test_case['method'](filepath=test_filepath,distance=dist)
+            if test_case['file_ending'] == 'npz':
+                data = np.load(test_filepath)
+                flux = data['flux']
+                wavelength = data['wavelength']
+                assert np.all(wavelength==self.atm.lambda_grid)
+                assert np.all(flux==self.atm.flux(wavelength=wavelength,distance=dist))
+            elif test_case['file_ending'] == 'txt':
+                data = np.loadtxt(test_filepath)
+                wavelength = data[:,0]*constants.nano
+                flux = data[:,1]*constants.erg/constants.centi**2/constants.nano
+                assert np.allclose(wavelength,self.atm.lambda_grid,rtol=1e-6,atol=0)
+                #if I take wavelength=wavelength, I run into issues (out of interpolation range
+                #just gives zero flux), so I use the original lambda_grid
+                model_flux = self.atm.flux(wavelength=self.atm.lambda_grid,distance=dist)
+                assert np.allclose(flux,model_flux,rtol=1e-6,atol=0)
+            else:
+                raise RuntimeError
+            os.remove(test_filepath)
 
 def general_test_flux_scaling(unscaled_atm,atm_cls,atm_kwargs):
     scalings = [lambda wavelength: 3,lambda wavelength: wavelength/3]
